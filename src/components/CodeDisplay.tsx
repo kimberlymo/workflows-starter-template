@@ -119,11 +119,10 @@ export function CodeDisplay({
 					<button
 						onClick={isIdle ? onStartWorkflow : undefined}
 						disabled={!isIdle}
-						className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-							isIdle
+						className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${isIdle
 								? "bg-neutral-900 dark:bg-neutral-800 text-white hover:bg-neutral-700 cursor-pointer"
 								: "bg-neutral-200 dark:bg-neutral-700 text-neutral-400 dark:text-neutral-500 cursor-not-allowed"
-						}`}
+							}`}
 					>
 						Start
 					</button>
@@ -148,24 +147,21 @@ export function CodeDisplay({
 							return (
 								<div
 									key={idx}
-									className={`transition-all duration-200 ${
-										isHighlighted
-											? `bg-blue-500/10 dark:bg-blue-500/20 -mx-3 px-3 ${
-													isFirstHighlighted && isLastHighlighted
-														? "rounded"
-														: isFirstHighlighted
-															? "rounded-t"
-															: isLastHighlighted
-																? "rounded-b"
-																: ""
-												}`
+									className={`transition-all duration-200 ${isHighlighted
+											? `bg-blue-500/10 dark:bg-blue-500/20 -mx-3 px-3 ${isFirstHighlighted && isLastHighlighted
+												? "rounded"
+												: isFirstHighlighted
+													? "rounded-t"
+													: isLastHighlighted
+														? "rounded-b"
+														: ""
+											}`
 											: ""
-									}`}
+										}`}
 								>
 									<span
-										className={`whitespace-pre ${
-											isHighlighted ? "font-medium" : ""
-										}`}
+										className={`whitespace-pre ${isHighlighted ? "font-medium" : ""
+											}`}
 									>
 										{highlightSyntax(line || " ")}
 									</span>
