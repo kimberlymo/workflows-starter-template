@@ -10,6 +10,13 @@ export type StepStatus =
 	| "error";
 export type WorkflowStatus = "idle" | "running" | "completed" | "error";
 
+export interface FunctionStatistic {
+	functionName: string;
+	durationMs: number;
+	status: "completed" | "error";
+	errorMessage?: string;
+}
+
 export interface StepDefinition {
 	id: string;
 	name: string;
@@ -23,6 +30,8 @@ export interface WorkflowState {
 	stepStatuses: Record<string, StepStatus>;
 	workflowStatus: WorkflowStatus;
 	errorMessage: string | null;
+	functionStatistics: FunctionStatistic[];
+	finalOutput: unknown;
 	wsConnected: boolean;
 }
 
@@ -32,6 +41,8 @@ export interface WorkflowUpdateMessage {
 	stepStatuses: Record<string, StepStatus>;
 	workflowStatus: "running" | "completed" | "error";
 	errorMessage: string | null;
+	functionStatistics: FunctionStatistic[];
+	finalOutput: unknown;
 	timestamp: number;
 }
 

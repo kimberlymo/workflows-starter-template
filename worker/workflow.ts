@@ -4,6 +4,22 @@ import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 type PreWarmingOption = "all" | "next";
 type StepStatus = "running" | "completed" | "error";
 type WorkflowPayload = Record<string, unknown>;
+type JsonValue =
+	| null
+	| boolean
+	| number
+	| string
+	| JsonValue[]
+	| { [key: string]: JsonValue };
+type FunctionRunResult =
+	| { status: "completed"; durationMs: number; outputJson: string }
+	| { status: "error"; durationMs: number; errorMessage: string };
+type FunctionStatistic = {
+	functionName: string;
+	durationMs: number;
+	status: "completed" | "error";
+	errorMessage?: string;
+};
 
 const FUNCTION_NAME_PATTERN = /^f[0-7]$/;
 
@@ -12,16 +28,16 @@ const FUNCTION_NAME_PATTERN = /^f[0-7]$/;
  */
 export class MyWorkflow extends WorkflowEntrypoint<Env, WorkflowPayload> {
 	async run(event: WorkflowEvent<WorkflowPayload>, step: WorkflowStep) {
-		console.log(event.payload)
 		const { flows, definitions, preWarming, preWarmingOption } =
 			this.parsePayload(event.payload);
 		const instanceId = event.instanceId;
+		const functionStatistics: FunctionStatistic[] = [];
 
 		if (preWarming && preWarmingOption === "all") {
 			await this.prewarmFunctions(flows, definitions, instanceId, step);
 		}
 
-		let functionInput: unknown = {};
+		let functionInput: JsonValue = {};
 		for (const functionName of flows) {
 			if (preWarming && preWarmingOption === "next") {
 				await this.prewarmFunctions(
@@ -35,50 +51,78 @@ export class MyWorkflow extends WorkflowEntrypoint<Env, WorkflowPayload> {
 
 			const stepName = `execute ${functionName}`;
 			await this.notifyStep(stepName, "running", instanceId);
-			try {
-				const url = definitions[functionName];
-				const responseBody = await step.do(stepName, async () => {
-					let response: Response;
-					try {
-						response = await fetch(url, {
-							method: "POST",
-							headers: { "Content-Type": "application/json" },
-							body: JSON.stringify(functionInput),
-						});
-					} catch (error) {
-						throw new Error(
-							`POST to function ${functionName} at ${url} failed: ${this.getErrorMessage(error)}`,
-							{ cause: error },
-						);
-					}
+			const result = await step.do(stepName, async (): Promise<FunctionRunResult> => {
+				const startedAt = Date.now();
+				try {
+					const url = definitions[functionName];
+					const response = await fetch(url, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(functionInput),
+					});
 
 					if (!response.ok) {
-						const responseBody = (await response.text()).slice(0, 300);
+						const body = (await response.text()).slice(0, 300);
 						throw new Error(
-							`Function ${functionName} at ${url} failed: HTTP ${response.status} ${response.statusText}${responseBody ? `: ${responseBody}` : ""}`,
+							`POST ${url} returned HTTP ${response.status} ${response.statusText}${body ? `: ${body}` : ""}`,
 						);
 					}
 
-					return response.text();
-				});
+					const responseBody = await response.text();
+					try {
+						JSON.parse(responseBody);
+					} catch (error) {
+						throw new Error("Function returned invalid JSON", { cause: error });
+					}
 
-				try {
-					functionInput = JSON.parse(responseBody);
+					return {
+						status: "completed",
+						durationMs: Date.now() - startedAt,
+						outputJson: responseBody,
+					};
 				} catch (error) {
-					throw new Error(
-						`Function ${functionName} did not return valid JSON`,
-						{ cause: error },
-					);
+					return {
+						status: "error",
+						durationMs: Date.now() - startedAt,
+						errorMessage: `Function ${functionName} failed: ${this.getErrorMessage(error)}`,
+					};
 				}
+			});
 
-				await this.notifyStep(stepName, "completed", instanceId);
-			} catch (error) {
-				const errorMessage = this.getErrorMessage(error);
-				console.error(`Workflow step "${stepName}" failed: ${errorMessage}`);
-				await this.notifyStep(stepName, "error", instanceId, errorMessage);
-				throw error;
+			const statistic = {
+				functionName,
+				durationMs: result.durationMs,
+				status: result.status,
+				...(result.status === "error"
+					? { errorMessage: result.errorMessage }
+					: {}),
+			};
+			functionStatistics.push(statistic);
+			const output: JsonValue | undefined =
+				result.status === "completed"
+					? (JSON.parse(result.outputJson) as JsonValue)
+					: undefined;
+			await this.recordFunctionStatistic(
+				instanceId,
+				statistic,
+				output,
+			);
+
+			if (result.status === "error") {
+				await this.notifyStep(
+					stepName,
+					"error",
+					instanceId,
+					result.errorMessage,
+				);
+				throw new Error(result.errorMessage);
 			}
+
+			functionInput = output ?? null;
 		}
+
+		await this.completeWorkflow(instanceId, functionInput);
+		return { output: functionInput, statistics: functionStatistics };
 	}
 
 	private parsePayload(payload: WorkflowPayload): {
@@ -219,6 +263,33 @@ export class MyWorkflow extends WorkflowEntrypoint<Env, WorkflowPayload> {
 			await stub.updateStep(stepName, status, errorMessage);
 		} catch (error) {
 			console.error(`Failed to report workflow step "${stepName}"`, error);
+		}
+	}
+
+	private async recordFunctionStatistic(
+		instanceId: string,
+		statistic: FunctionStatistic,
+		output?: unknown,
+	): Promise<void> {
+		try {
+			const id = this.env.WORKFLOW_STATUS.idFromName(instanceId);
+			const stub = this.env.WORKFLOW_STATUS.get(id);
+			await stub.recordFunctionStatistic(statistic, output);
+		} catch (error) {
+			console.error("Failed to report function statistics", error);
+		}
+	}
+
+	private async completeWorkflow(
+		instanceId: string,
+		output: unknown,
+	): Promise<void> {
+		try {
+			const id = this.env.WORKFLOW_STATUS.idFromName(instanceId);
+			const stub = this.env.WORKFLOW_STATUS.get(id);
+			await stub.completeWorkflow(output);
+		} catch (error) {
+			console.error("Failed to report workflow completion", error);
 		}
 	}
 }

@@ -1,29 +1,20 @@
 import { useState, useEffect } from "react";
-import { WorkflowDiagram } from "./components/WorkflowDiagram";
 import { CodeDisplay } from "./components/CodeDisplay";
 import { BackgroundDots } from "./components/BackgroundDots";
+import { WorkflowStatistics } from "./components/WorkflowStatistics";
 import { useWorkflowWebSocket } from "./hooks/useWorkflowWebSocket";
-import { WORKFLOW_STEPS } from "./types";
 
 function App() {
 	const [instanceId, setInstanceId] = useState<string | null>(null);
 	const [isStarting, setIsStarting] = useState(false);
 	const [workflowPayload, setWorkflowPayload] = useState({
-		flowOrder: "f0",
-		definitions: '{"f0":"https://example.com"}',
+		flowOrder: "f0-f1-f2-f3",
+		definitions:
+			'{"f0":"https://example.com","f1":"https://google.com","f2":"https://google.com","f3":"https://google.com"}',
 		preWarming: false,
 		preWarmingOption: "all" as "all" | "next",
 	});
 	const workflowState = useWorkflowWebSocket(instanceId);
-
-	useEffect(() => {
-		if (workflowState.workflowStatus === "completed") {
-			const timer = setTimeout(() => {
-				setInstanceId(null);
-			}, 1500);
-			return () => clearTimeout(timer);
-		}
-	}, [workflowState.workflowStatus]);
 
 	useEffect(() => {
 		if (
@@ -36,6 +27,7 @@ function App() {
 
 	const handleStartWorkflow = async () => {
 		setIsStarting(true);
+		setInstanceId(null);
 
 		try {
 			const response = await fetch("/api/workflow/start", {
@@ -100,9 +92,9 @@ function App() {
 			</header>
 
 			{/* Main content - unified canvas */}
-			<main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative z-10">
+			<main>
 				{/* Left side - Code (responsive width) */}
-				<div className="w-full lg:w-[60%] overflow-hidden px-6 pb-6">
+				<div className="w-full overflow-y-auto">
 					<CodeDisplay
 						currentStep={workflowState.currentStep}
 						workflowStatus={workflowState.workflowStatus}
@@ -112,18 +104,9 @@ function App() {
 						{...workflowPayload}
 						onPayloadChange={setWorkflowPayload}
 					/>
-				</div>
-
-				{/* Right side - Diagram (responsive width) */}
-				<div className="flex-1 overflow-hidden px-6 lg:pl-8 lg:pr-6 pb-6">
-					<WorkflowDiagram
-						steps={WORKFLOW_STEPS}
-						stepStatuses={workflowState.stepStatuses}
-						currentStep={workflowState.currentStep}
-						instanceId={instanceId}
-						workflowStatus={workflowState.workflowStatus}
-						onStartWorkflow={handleStartWorkflow}
-						isStarting={isStarting}
+					<WorkflowStatistics
+						statistics={workflowState.functionStatistics}
+						finalOutput={workflowState.finalOutput}
 					/>
 				</div>
 			</main>

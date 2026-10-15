@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import type { FunctionStatistic } from "../src/types";
 
 /**
  * WorkflowStatusDO - Durable Object for managing workflow state and WebSocket connections
@@ -14,6 +15,8 @@ export class WorkflowStatusDO extends DurableObject {
 	private currentStep: string | null;
 	private workflowStatus: "running" | "completed" | "error";
 	private errorMessage: string | null;
+	private functionStatistics: FunctionStatistic[];
+	private finalOutput: unknown;
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
@@ -22,6 +25,8 @@ export class WorkflowStatusDO extends DurableObject {
 		this.currentStep = null;
 		this.workflowStatus = "running";
 		this.errorMessage = null;
+		this.functionStatistics = [];
+		this.finalOutput = null;
 
 		// Load state from durable storage to survive hibernation/eviction
 		ctx.blockConcurrencyWhile(async () => {
@@ -33,6 +38,9 @@ export class WorkflowStatusDO extends DurableObject {
 			>("workflowStatus");
 			const storedErrorMessage =
 				await ctx.storage.get<string | null>("errorMessage");
+			const storedFunctionStatistics =
+				await ctx.storage.get<FunctionStatistic[]>("functionStatistics");
+			this.finalOutput = await ctx.storage.get("finalOutput");
 
 			if (storedStatuses) {
 				this.stepStatuses = new Map(Object.entries(storedStatuses));
@@ -41,6 +49,7 @@ export class WorkflowStatusDO extends DurableObject {
 			this.currentStep = storedCurrent ?? null;
 			this.workflowStatus = storedWorkflowStatus ?? "running";
 			this.errorMessage = storedErrorMessage ?? null;
+			this.functionStatistics = storedFunctionStatistics ?? [];
 		});
 	}
 
@@ -95,14 +104,35 @@ export class WorkflowStatusDO extends DurableObject {
 		this.broadcast(this.getStateMessage());
 	}
 
-	async completeWorkflow(): Promise<void> {
+	async recordFunctionStatistic(
+		statistic: FunctionStatistic,
+		output?: unknown,
+	): Promise<void> {
+		this.functionStatistics = [
+			...this.functionStatistics.filter(
+				(item) => item.functionName !== statistic.functionName,
+			),
+			statistic,
+		];
+		if (output !== undefined) {
+			this.finalOutput = output;
+		}
+
+		await this.ctx.storage.put("functionStatistics", this.functionStatistics);
+		await this.ctx.storage.put("finalOutput", this.finalOutput);
+		this.broadcast(this.getStateMessage());
+	}
+
+	async completeWorkflow(output: unknown): Promise<void> {
 		this.workflowStatus = "completed";
 		this.currentStep = null;
 		this.errorMessage = null;
+		this.finalOutput = output;
 
 		await this.ctx.storage.put("currentStep", null);
 		await this.ctx.storage.put("workflowStatus", this.workflowStatus);
 		await this.ctx.storage.put("errorMessage", null);
+		await this.ctx.storage.put("finalOutput", output);
 		this.broadcast(this.getStateMessage());
 	}
 
@@ -153,6 +183,8 @@ export class WorkflowStatusDO extends DurableObject {
 			stepStatuses: Object.fromEntries(this.stepStatuses),
 			workflowStatus: this.workflowStatus,
 			errorMessage: this.errorMessage,
+			functionStatistics: this.functionStatistics,
+			finalOutput: this.finalOutput,
 			timestamp: Date.now(),
 		};
 	}

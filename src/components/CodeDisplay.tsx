@@ -28,7 +28,7 @@ export function CodeDisplay({
 	preWarming,
 	onPayloadChange,
 }: CodeDisplayProps) {
-	const isIdle = workflowStatus === "idle" && !isStarting;
+	const canStart = workflowStatus !== "running" && !isStarting;
 
 	return (
 		<section className="h-full overflow-auto p-4">
@@ -126,7 +126,7 @@ export function CodeDisplay({
 
 				<button
 					type="submit"
-					disabled={!isIdle}
+					disabled={!canStart}
 					className="rounded bg-neutral-900 px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-neutral-700 dark:text-neutral-200"
 				>
 					{isStarting ? "Starting..." : "Start workflow"}

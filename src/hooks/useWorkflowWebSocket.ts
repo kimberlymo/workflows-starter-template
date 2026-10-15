@@ -20,6 +20,8 @@ const initialState: WorkflowState = {
 	),
 	workflowStatus: "idle",
 	errorMessage: null,
+	functionStatistics: [],
+	finalOutput: null,
 	wsConnected: false,
 };
 
@@ -38,6 +40,8 @@ function workflowReducer(state: WorkflowState, action: Action): WorkflowState {
 				stepStatuses: action.payload.stepStatuses,
 				workflowStatus: action.payload.workflowStatus,
 				errorMessage: action.payload.errorMessage,
+				functionStatistics: action.payload.functionStatistics,
+				finalOutput: action.payload.finalOutput,
 			};
 
 		case "RESET":
