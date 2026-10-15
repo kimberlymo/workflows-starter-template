@@ -51,7 +51,7 @@ function App() {
 	return (
 		<div className="min-h-screen bg-neutral-50/30 dark:bg-neutral-950 flex flex-col relative">
 			{/* Background dots across entire page */}
-			<div className="absolute inset-0 text-neutral-200/50 dark:text-neutral-700/40 overflow-hidden">
+			<div className="pointer-events-none absolute inset-0 text-neutral-200/50 dark:text-neutral-700/40 overflow-hidden">
 				<BackgroundDots />
 			</div>
 
