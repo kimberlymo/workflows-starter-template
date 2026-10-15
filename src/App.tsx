@@ -106,6 +106,7 @@ function App() {
 					<CodeDisplay
 						currentStep={workflowState.currentStep}
 						workflowStatus={workflowState.workflowStatus}
+						errorMessage={workflowState.errorMessage}
 						onStartWorkflow={handleStartWorkflow}
 						isStarting={isStarting}
 						{...workflowPayload}

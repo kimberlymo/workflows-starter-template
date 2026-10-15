@@ -1,6 +1,7 @@
 interface CodeDisplayProps {
 	currentStep: string | null;
 	workflowStatus: "idle" | "running" | "completed" | "error";
+	errorMessage: string | null;
 	onStartWorkflow: () => void;
 	isStarting: boolean;
 	flowOrder: string;
@@ -18,6 +19,7 @@ interface CodeDisplayProps {
 export function CodeDisplay({
 	currentStep,
 	workflowStatus,
+	errorMessage,
 	onStartWorkflow,
 	isStarting,
 	flowOrder,
@@ -134,6 +136,11 @@ export function CodeDisplay({
 					Status: {workflowStatus}
 					{currentStep ? ` — ${currentStep}` : ""}
 				</p>
+				{errorMessage && (
+					<p role="alert" className="break-words text-sm text-red-700 dark:text-red-300">
+						{errorMessage}
+					</p>
+				)}
 			</form>
 		</section>
 	);

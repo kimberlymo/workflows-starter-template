@@ -19,6 +19,7 @@ const initialState: WorkflowState = {
 		WORKFLOW_STEPS.map((step) => [step.name, "pending" as StepStatus]),
 	),
 	workflowStatus: "idle",
+	errorMessage: null,
 	wsConnected: false,
 };
 
@@ -36,6 +37,7 @@ function workflowReducer(state: WorkflowState, action: Action): WorkflowState {
 				currentStep: action.payload.currentStep,
 				stepStatuses: action.payload.stepStatuses,
 				workflowStatus: action.payload.workflowStatus,
+				errorMessage: action.payload.errorMessage,
 			};
 
 		case "RESET":

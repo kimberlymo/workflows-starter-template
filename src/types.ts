@@ -22,6 +22,7 @@ export interface WorkflowState {
 	currentStep: string | null;
 	stepStatuses: Record<string, StepStatus>;
 	workflowStatus: WorkflowStatus;
+	errorMessage: string | null;
 	wsConnected: boolean;
 }
 
@@ -30,6 +31,7 @@ export interface WorkflowUpdateMessage {
 	currentStep: string | null;
 	stepStatuses: Record<string, StepStatus>;
 	workflowStatus: "running" | "completed" | "error";
+	errorMessage: string | null;
 	timestamp: number;
 }
 

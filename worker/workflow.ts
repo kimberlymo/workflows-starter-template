@@ -12,6 +12,7 @@ const FUNCTION_NAME_PATTERN = /^f[0-7]$/;
  */
 export class MyWorkflow extends WorkflowEntrypoint<Env, WorkflowPayload> {
 	async run(event: WorkflowEvent<WorkflowPayload>, step: WorkflowStep) {
+		console.log(event.payload)
 		const { flows, definitions, preWarming, preWarmingOption } =
 			this.parsePayload(event.payload);
 		const instanceId = event.instanceId;
@@ -35,16 +36,26 @@ export class MyWorkflow extends WorkflowEntrypoint<Env, WorkflowPayload> {
 			const stepName = `execute ${functionName}`;
 			await this.notifyStep(stepName, "running", instanceId);
 			try {
+				const url = definitions[functionName];
 				const responseBody = await step.do(stepName, async () => {
-					const response = await fetch(definitions[functionName], {
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify(functionInput),
-					});
+					let response: Response;
+					try {
+						response = await fetch(url, {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify(functionInput),
+						});
+					} catch (error) {
+						throw new Error(
+							`POST to function ${functionName} at ${url} failed: ${this.getErrorMessage(error)}`,
+							{ cause: error },
+						);
+					}
 
 					if (!response.ok) {
+						const responseBody = (await response.text()).slice(0, 300);
 						throw new Error(
-							`Function ${functionName} failed: HTTP ${response.status}`,
+							`Function ${functionName} at ${url} failed: HTTP ${response.status} ${response.statusText}${responseBody ? `: ${responseBody}` : ""}`,
 						);
 					}
 
@@ -62,7 +73,9 @@ export class MyWorkflow extends WorkflowEntrypoint<Env, WorkflowPayload> {
 
 				await this.notifyStep(stepName, "completed", instanceId);
 			} catch (error) {
-				await this.notifyStep(stepName, "error", instanceId);
+				const errorMessage = this.getErrorMessage(error);
+				console.error(`Workflow step "${stepName}" failed: ${errorMessage}`);
+				await this.notifyStep(stepName, "error", instanceId, errorMessage);
 				throw error;
 			}
 		}
@@ -145,13 +158,22 @@ export class MyWorkflow extends WorkflowEntrypoint<Env, WorkflowPayload> {
 		await this.runStep(step, stepName, instanceId, async () => {
 			await Promise.all(
 				flows.map(async (functionName) => {
-					const response = await fetch(definitions[functionName]);
-					if (!response.ok) {
+					const url = definitions[functionName];
+					try {
+						const response = await fetch(url);
+						if (!response.ok) {
+							const responseText = await response.text();
+							throw new Error(
+								`HTTP ${response.status} ${response.statusText}${responseText ? `: ${responseText.slice(0, 300)}` : ""}`,
+							);
+						}
+						await response.body?.cancel();
+					} catch (error) {
 						throw new Error(
-							`Failed to prewarm ${functionName}: HTTP ${response.status}`,
+							`Prewarming ${functionName} at ${url} failed: ${this.getErrorMessage(error)}`,
+							{ cause: error },
 						);
 					}
-					await response.body?.cancel();
 				}),
 			);
 		});
@@ -168,20 +190,33 @@ export class MyWorkflow extends WorkflowEntrypoint<Env, WorkflowPayload> {
 			await step.do(stepName, run);
 			await this.notifyStep(stepName, "completed", instanceId);
 		} catch (error) {
-			await this.notifyStep(stepName, "error", instanceId);
+			const errorMessage = this.getErrorMessage(error);
+			console.error(`Workflow step "${stepName}" failed: ${errorMessage}`);
+			await this.notifyStep(stepName, "error", instanceId, errorMessage);
 			throw error;
 		}
+	}
+
+	private getErrorMessage(error: unknown): string {
+		if (error instanceof Error) {
+			const cause = error.cause;
+			return cause === undefined
+				? error.message
+				: `${error.message} (cause: ${this.getErrorMessage(cause)})`;
+		}
+		return String(error);
 	}
 
 	private async notifyStep(
 		stepName: string,
 		status: StepStatus,
 		instanceId: string,
+		errorMessage?: string,
 	): Promise<void> {
 		try {
 			const id = this.env.WORKFLOW_STATUS.idFromName(instanceId);
 			const stub = this.env.WORKFLOW_STATUS.get(id);
-			await stub.updateStep(stepName, status);
+			await stub.updateStep(stepName, status, errorMessage);
 		} catch (error) {
 			console.error(`Failed to report workflow step "${stepName}"`, error);
 		}

@@ -13,6 +13,7 @@ export class WorkflowStatusDO extends DurableObject {
 	private stepStatuses: Map<string, string>;
 	private currentStep: string | null;
 	private workflowStatus: "running" | "completed" | "error";
+	private errorMessage: string | null;
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
@@ -20,6 +21,7 @@ export class WorkflowStatusDO extends DurableObject {
 		this.stepStatuses = new Map();
 		this.currentStep = null;
 		this.workflowStatus = "running";
+		this.errorMessage = null;
 
 		// Load state from durable storage to survive hibernation/eviction
 		ctx.blockConcurrencyWhile(async () => {
@@ -29,6 +31,8 @@ export class WorkflowStatusDO extends DurableObject {
 			const storedWorkflowStatus = await ctx.storage.get<
 				"running" | "completed" | "error"
 			>("workflowStatus");
+			const storedErrorMessage =
+				await ctx.storage.get<string | null>("errorMessage");
 
 			if (storedStatuses) {
 				this.stepStatuses = new Map(Object.entries(storedStatuses));
@@ -36,6 +40,7 @@ export class WorkflowStatusDO extends DurableObject {
 
 			this.currentStep = storedCurrent ?? null;
 			this.workflowStatus = storedWorkflowStatus ?? "running";
+			this.errorMessage = storedErrorMessage ?? null;
 		});
 	}
 
@@ -60,17 +65,23 @@ export class WorkflowStatusDO extends DurableObject {
 	 * RPC method called by the workflow to update step status
 	 * This is called via stub.updateStep() from the workflow
 	 */
-	async updateStep(stepName: string, status: string): Promise<void> {
+	async updateStep(
+		stepName: string,
+		status: string,
+		errorMessage?: string,
+	): Promise<void> {
 		this.stepStatuses.set(stepName, status);
 
 		if (status === "running" || status === "waiting") {
 			this.currentStep = stepName;
 			this.workflowStatus = "running";
+			this.errorMessage = null;
 		}
 
 		if (status === "error") {
 			this.workflowStatus = "error";
 			this.currentStep = null;
+			this.errorMessage = errorMessage ?? `Step "${stepName}" failed`;
 		}
 
 		await this.ctx.storage.put(
@@ -79,6 +90,7 @@ export class WorkflowStatusDO extends DurableObject {
 		);
 		await this.ctx.storage.put("currentStep", this.currentStep);
 		await this.ctx.storage.put("workflowStatus", this.workflowStatus);
+		await this.ctx.storage.put("errorMessage", this.errorMessage);
 
 		this.broadcast(this.getStateMessage());
 	}
@@ -86,9 +98,11 @@ export class WorkflowStatusDO extends DurableObject {
 	async completeWorkflow(): Promise<void> {
 		this.workflowStatus = "completed";
 		this.currentStep = null;
+		this.errorMessage = null;
 
 		await this.ctx.storage.put("currentStep", null);
 		await this.ctx.storage.put("workflowStatus", this.workflowStatus);
+		await this.ctx.storage.put("errorMessage", null);
 		this.broadcast(this.getStateMessage());
 	}
 
@@ -138,6 +152,7 @@ export class WorkflowStatusDO extends DurableObject {
 			currentStep: this.currentStep,
 			stepStatuses: Object.fromEntries(this.stepStatuses),
 			workflowStatus: this.workflowStatus,
+			errorMessage: this.errorMessage,
 			timestamp: Date.now(),
 		};
 	}
