@@ -8,6 +8,12 @@ import { WORKFLOW_STEPS } from "./types";
 function App() {
 	const [instanceId, setInstanceId] = useState<string | null>(null);
 	const [isStarting, setIsStarting] = useState(false);
+	const [workflowPayload, setWorkflowPayload] = useState({
+		flowOrder: "f0",
+		definitions: '{"f0":"https://example.com"}',
+		preWarming: false,
+		preWarmingOption: "all" as "all" | "next",
+	});
 	const workflowState = useWorkflowWebSocket(instanceId);
 
 	useEffect(() => {
@@ -34,6 +40,8 @@ function App() {
 		try {
 			const response = await fetch("/api/workflow/start", {
 				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(workflowPayload),
 			});
 
 			if (!response.ok) {
@@ -100,6 +108,8 @@ function App() {
 						workflowStatus={workflowState.workflowStatus}
 						onStartWorkflow={handleStartWorkflow}
 						isStarting={isStarting}
+						{...workflowPayload}
+						onPayloadChange={setWorkflowPayload}
 					/>
 				</div>
 

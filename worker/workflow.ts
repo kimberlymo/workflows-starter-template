@@ -1,96 +1,189 @@
-import { WorkflowEntrypoint, WorkflowStep } from "cloudflare:workers";
-import type { WorkflowEvent } from "cloudflare:workers";
+import { WorkflowEntrypoint } from "cloudflare:workers";
+import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
+
+type PreWarmingOption = "all" | "next";
+type StepStatus = "running" | "completed" | "error";
+type WorkflowPayload = Record<string, unknown>;
+
+const FUNCTION_NAME_PATTERN = /^f[0-7]$/;
 
 /**
- * This workflow showcases:
- * - Durable step execution with step.do
- * - Time-based delays with step.sleep
- * - Interactive pausing with step.waitForEvent
- * - Data flow between steps
- *
  * @see https://developers.cloudflare.com/workflows
  */
-export class MyWorkflow extends WorkflowEntrypoint<
-	Env,
-	Record<string, unknown>
-> {
-	// Notify Durable Object of step progress. Called outside step.do, so this
-	// operation may repeat. Safe here because updateStep is idempotent.
-	// Refer to: https://developers.cloudflare.com/workflows/build/rules-of-workflows/
-	async notifyStep(stepName: string, status: "running" | "completed" | "waiting", instanceId: string) {
-		try {
-			const doId = this.env.WORKFLOW_STATUS.idFromName(instanceId);
-			const stub = this.env.WORKFLOW_STATUS.get(doId);
-			await stub.updateStep(stepName, status);
-		} catch {
-			// Silently fail
-		}
-	};
-
-	async run(event: WorkflowEvent<Record<string, unknown>>, step: WorkflowStep) {
+export class MyWorkflow extends WorkflowEntrypoint<Env, WorkflowPayload> {
+	async run(event: WorkflowEvent<WorkflowPayload>, step: WorkflowStep) {
+		const { flows, definitions, preWarming, preWarmingOption } =
+			this.parsePayload(event.payload);
 		const instanceId = event.instanceId;
-		const flowOrder = event.payload.flowOrder as string;
-		const functionDefinitions = event.payload.definitions as string;
-		const preWarming = event.payload.preWarming;
 
-		const flows = flowOrder.split("-");
-		const definitions = JSON.parse(functionDefinitions) as Record<string, string>;
+		if (preWarming && preWarmingOption === "all") {
+			await this.prewarmFunctions(flows, definitions, instanceId, step);
+		}
+
+		let functionInput: unknown = {};
+		for (const functionName of flows) {
+			if (preWarming && preWarmingOption === "next") {
+				await this.prewarmFunctions(
+					[functionName],
+					definitions,
+					instanceId,
+					step,
+					`prewarm ${functionName}`,
+				);
+			}
+
+			const stepName = `execute ${functionName}`;
+			await this.notifyStep(stepName, "running", instanceId);
+			try {
+				const responseBody = await step.do(stepName, async () => {
+					const response = await fetch(definitions[functionName], {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(functionInput),
+					});
+
+					if (!response.ok) {
+						throw new Error(
+							`Function ${functionName} failed: HTTP ${response.status}`,
+						);
+					}
+
+					return response.text();
+				});
+
+				try {
+					functionInput = JSON.parse(responseBody);
+				} catch (error) {
+					throw new Error(
+						`Function ${functionName} did not return valid JSON`,
+						{ cause: error },
+					);
+				}
+
+				await this.notifyStep(stepName, "completed", instanceId);
+			} catch (error) {
+				await this.notifyStep(stepName, "error", instanceId);
+				throw error;
+			}
+		}
+	}
+
+	private parsePayload(payload: WorkflowPayload): {
+		flows: string[];
+		definitions: Record<string, string>;
+		preWarming: boolean;
+		preWarmingOption: PreWarmingOption;
+	} {
+		const { flowOrder, definitions: serializedDefinitions, preWarming } =
+			payload;
+		if (typeof flowOrder !== "string" || typeof serializedDefinitions !== "string") {
+			throw new Error("Payload must include flowOrder and JSON definitions");
+		}
+		if (typeof preWarming !== "boolean") {
+			throw new Error("Payload must include a boolean preWarming value");
+		}
+
+		const flows = flowOrder.split("-").map((flow) => flow.trim());
+		if (
+			flows.length === 0 ||
+			flows.some((flow) => !FUNCTION_NAME_PATTERN.test(flow))
+		) {
+			throw new Error("Flow order must contain function names from f0 to f7");
+		}
+		if (new Set(flows).size !== flows.length) {
+			throw new Error("Flow order cannot contain duplicate function names");
+		}
+
+		let parsedDefinitions: unknown;
+		try {
+			parsedDefinitions = JSON.parse(serializedDefinitions);
+		} catch (error) {
+			throw new Error("Function definitions must be valid JSON", { cause: error });
+		}
+		if (
+			typeof parsedDefinitions !== "object" ||
+			parsedDefinitions === null ||
+			Array.isArray(parsedDefinitions)
+		) {
+			throw new Error("Function definitions must be a JSON object");
+		}
+
+		const definitions: Record<string, string> = {};
+		for (const [name, value] of Object.entries(parsedDefinitions)) {
+			if (typeof value !== "string" || value.trim() === "") {
+				throw new Error(`Definition for ${name} must be a non-empty URL`);
+			}
+			definitions[name] = value;
+		}
 
 		for (const functionName of flows) {
 			if (!definitions[functionName]) {
 				throw new Error(`Function definition not found for flow: ${functionName}`);
 			}
-
-			const checkNameRegex = /^f[0-7]+$/;
-			if (!checkNameRegex.test(functionName)) {
-				throw new Error(`Invalid function name: ${functionName}`);
-			}
 		}
 
-		if (preWarming === true) {
-			await this.notifyStep("prewarm functions", "running", instanceId);
-			await step.do("prewarm functions", async () => {
-				await Promise.all(
-					flows.map(async (functionName) => {
-						const url = definitions[functionName];
-
-						if (!url) {
-							throw new Error(
-								`Function definition not found for flow: ${functionName}`,
-							);
-						}
-
-						const response = await fetch(url);
-						if (!response.ok) {
-							throw new Error(
-								`Failed to prewarm ${functionName}: HTTP ${response.status}`,
-							);
-						}
-
-						await response.body?.cancel();
-					}),
-				);
-			});
-			await this.notifyStep("prewarm functions", "completed", instanceId);
+		const option = payload.preWarmingOption;
+		if (preWarming && option !== "all" && option !== "next") {
+			throw new Error("preWarmingOption must be 'all' or 'next'");
 		}
 
-		for (const functionName of flows) {
-			const url = definitions[functionName];
+		return {
+			flows,
+			definitions,
+			preWarming,
+			preWarmingOption: option === "next" ? "next" : "all",
+		};
+	}
 
-			if (!url) {
-				throw new Error(`Function definition not found for flow: ${functionName}`);
-			}
+	private async prewarmFunctions(
+		flows: string[],
+		definitions: Record<string, string>,
+		instanceId: string,
+		step: WorkflowStep,
+		stepName = "prewarm functions",
+	): Promise<void> {
+		await this.runStep(step, stepName, instanceId, async () => {
+			await Promise.all(
+				flows.map(async (functionName) => {
+					const response = await fetch(definitions[functionName]);
+					if (!response.ok) {
+						throw new Error(
+							`Failed to prewarm ${functionName}: HTTP ${response.status}`,
+						);
+					}
+					await response.body?.cancel();
+				}),
+			);
+		});
+	}
 
-			console.log(`Executing flow: ${functionName}, function: ${functionName}`);
+	private async runStep(
+		step: WorkflowStep,
+		stepName: string,
+		instanceId: string,
+		run: () => Promise<void>,
+	): Promise<void> {
+		await this.notifyStep(stepName, "running", instanceId);
+		try {
+			await step.do(stepName, run);
+			await this.notifyStep(stepName, "completed", instanceId);
+		} catch (error) {
+			await this.notifyStep(stepName, "error", instanceId);
+			throw error;
+		}
+	}
 
-			await this.notifyStep(`execute ${functionName}`, "running", instanceId);
-			// Execute the function (this is a placeholder, replace with actual function execution)
-			await step.do(`execute ${functionName}`, async () => {
-				// Simulate function execution
-				await new Promise((resolve) => setTimeout(resolve, 500));
-				return { executed: true, functionName };
-			});
-			await this.notifyStep(`execute ${functionName}`, "completed", instanceId);
+	private async notifyStep(
+		stepName: string,
+		status: StepStatus,
+		instanceId: string,
+	): Promise<void> {
+		try {
+			const id = this.env.WORKFLOW_STATUS.idFromName(instanceId);
+			const stub = this.env.WORKFLOW_STATUS.get(id);
+			await stub.updateStep(stepName, status);
+		} catch (error) {
+			console.error(`Failed to report workflow step "${stepName}"`, error);
 		}
 	}
 }

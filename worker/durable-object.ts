@@ -32,14 +32,6 @@ export class WorkflowStatusDO extends DurableObject {
 
 			if (storedStatuses) {
 				this.stepStatuses = new Map(Object.entries(storedStatuses));
-			} else {
-				const steps = [
-					"process data",
-					"wait 2 seconds",
-					"wait for approval",
-					"final",
-				];
-				steps.forEach((s) => this.stepStatuses.set(s, "pending"));
 			}
 
 			this.currentStep = storedCurrent ?? null;
@@ -73,13 +65,11 @@ export class WorkflowStatusDO extends DurableObject {
 
 		if (status === "running" || status === "waiting") {
 			this.currentStep = stepName;
+			this.workflowStatus = "running";
 		}
 
-		const allCompleted = Array.from(this.stepStatuses.values()).every(
-			(s) => s === "completed",
-		);
-		if (allCompleted) {
-			this.workflowStatus = "completed";
+		if (status === "error") {
+			this.workflowStatus = "error";
 			this.currentStep = null;
 		}
 
@@ -90,6 +80,15 @@ export class WorkflowStatusDO extends DurableObject {
 		await this.ctx.storage.put("currentStep", this.currentStep);
 		await this.ctx.storage.put("workflowStatus", this.workflowStatus);
 
+		this.broadcast(this.getStateMessage());
+	}
+
+	async completeWorkflow(): Promise<void> {
+		this.workflowStatus = "completed";
+		this.currentStep = null;
+
+		await this.ctx.storage.put("currentStep", null);
+		await this.ctx.storage.put("workflowStatus", this.workflowStatus);
 		this.broadcast(this.getStateMessage());
 	}
 

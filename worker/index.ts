@@ -2,6 +2,10 @@
 export { MyWorkflow } from "./workflow";
 export { WorkflowStatusDO } from "./durable-object";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Main Worker fetch handler
  *
@@ -17,11 +21,41 @@ export default {
 
 		// API: Start a new workflow instance
 		if (url.pathname === "/api/workflow/start" && request.method === "POST") {
+			let payload: unknown;
+			try {
+				payload = await request.json();
+			} catch {
+				return Response.json({ error: "Request body must be valid JSON" }, { status: 400 });
+			}
+
+			if (
+				!isRecord(payload) ||
+				typeof payload.flowOrder !== "string" ||
+				typeof payload.definitions !== "string" ||
+				typeof payload.preWarming !== "boolean"
+			) {
+				return Response.json(
+					{
+						error:
+							"Payload must include flowOrder, definitions, and preWarming",
+					},
+					{ status: 400 },
+				);
+			}
+			if (
+				payload.preWarming &&
+				payload.preWarmingOption !== "all" &&
+				payload.preWarmingOption !== "next"
+			) {
+				return Response.json(
+					{ error: "preWarmingOption must be 'all' or 'next'" },
+					{ status: 400 },
+				);
+			}
+
 			try {
 				const instance = await env.MY_WORKFLOW.create({
-					params: {
-						timestamp: Date.now(),
-					},
+					params: payload,
 				});
 
 				return Response.json({

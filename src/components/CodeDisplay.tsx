@@ -1,91 +1,18 @@
-import { WORKFLOW_STEPS } from "../types";
-import type { JSX } from "react";
-
 interface CodeDisplayProps {
 	currentStep: string | null;
 	workflowStatus: "idle" | "running" | "completed" | "error";
 	onStartWorkflow: () => void;
 	isStarting: boolean;
-}
-
-// The workflow code to display (simplified for illustration)
-const WORKFLOW_CODE = `export class MyWorkflow extends WorkflowEntrypoint<Env> {
-  async run(event: WorkflowEvent, step: WorkflowStep) {
-    // Step 1: Process some data
-    const result = await step.do('process data', async () => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return { processed: true, timestamp: Date.now() };
-    });
-
-    // Step 2: Wait 2 seconds
-    await step.sleep('wait 2 seconds', '2 seconds');
-
-    // Step 3: Wait for user approval
-    const approval = await step.waitForEvent('wait for approval', {
-      type: 'user-approval',
-      timeout: '60 minutes'
-    });
-
-    // Step 4: Final step
-    await step.do('final', async () => {
-      console.log('Results:', { result, approval: approval.payload });
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    });
-  }
-}`;
-
-// Simple syntax highlighting
-function highlightSyntax(line: string): JSX.Element {
-	// Comments take precedence
-	if (line.trim().startsWith("//")) {
-		return (
-			<span className="text-neutral-500 dark:text-neutral-400">{line}</span>
-		);
-	}
-
-	// Split by tokens and wrap with appropriate colors
-	const tokens = line.split(
-		/(\b(?:export|class|extends|async|await|const|return|new|Promise)\b|'[^']*'|"[^"]*"|\b\d+\b)/g,
-	);
-
-	return (
-		<>
-			{tokens.map((token, i) => {
-				if (!token) return null;
-
-				// Keywords
-				if (
-					/^(export|class|extends|async|await|const|return|new|Promise)$/.test(
-						token,
-					)
-				) {
-					return (
-						<span key={i} className="text-[#0054a6] dark:text-[#61afef]">
-							{token}
-						</span>
-					);
-				}
-				// Strings
-				if (/^['"]/.test(token)) {
-					return (
-						<span key={i} className="text-[#a85454] dark:text-[#d19a66]">
-							{token}
-						</span>
-					);
-				}
-				// Numbers
-				if (/^\d+$/.test(token)) {
-					return (
-						<span key={i} className="text-[#047857] dark:text-[#98c379]">
-							{token}
-						</span>
-					);
-				}
-				// Default
-				return <span key={i}>{token}</span>;
-			})}
-		</>
-	);
+	flowOrder: string;
+	definitions: string;
+	preWarming: boolean;
+	preWarmingOption: "all" | "next";
+	onPayloadChange: (payload: {
+		flowOrder: string;
+		definitions: string;
+		preWarming: boolean;
+		preWarmingOption: "all" | "next";
+	}) => void;
 }
 
 export function CodeDisplay({
@@ -93,84 +20,121 @@ export function CodeDisplay({
 	workflowStatus,
 	onStartWorkflow,
 	isStarting,
+	flowOrder,
+	preWarmingOption,
+	definitions,
+	preWarming,
+	onPayloadChange,
 }: CodeDisplayProps) {
-	const lines = WORKFLOW_CODE.split("\n");
-
-	// Find the line range for the current step
-	const currentStepDef = WORKFLOW_STEPS.find((s) => s.name === currentStep);
-	const highlightRange = currentStepDef?.lineRange;
 	const isIdle = workflowStatus === "idle" && !isStarting;
 
 	return (
-		<div className="h-full overflow-auto p-4">
-			<div className="backdrop-blur-xl bg-white/80 dark:bg-neutral-900/80 rounded-2xl shadow-float ring-glass overflow-hidden">
-				{/* Window chrome header */}
-				<div className="flex items-center gap-2 px-4 py-3">
-					<div className="flex gap-1.5">
-						<div className="w-3 h-3 rounded-full bg-neutral-300 dark:bg-neutral-500" />
-						<div className="w-3 h-3 rounded-full bg-neutral-300 dark:bg-neutral-500" />
-						<div className="w-3 h-3 rounded-full bg-neutral-300 dark:bg-neutral-500" />
-					</div>
-					<div className="flex-1 text-center">
-						<span className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">
-							workflow.ts
-						</span>
-					</div>
-					<button
-						onClick={isIdle ? onStartWorkflow : undefined}
-						disabled={!isIdle}
-						className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${isIdle
-								? "bg-neutral-900 dark:bg-neutral-800 text-white hover:bg-neutral-700 cursor-pointer"
-								: "bg-neutral-200 dark:bg-neutral-700 text-neutral-400 dark:text-neutral-500 cursor-not-allowed"
-							}`}
-					>
-						Start
-					</button>
+		<section className="h-full overflow-auto p-4">
+			<form
+				className="space-y-4 rounded-lg border border-neutral-300 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900"
+				onSubmit={(event) => {
+					event.preventDefault();
+					onStartWorkflow();
+				}}
+			>
+				<div>
+					<label htmlFor="flow-order" className="mb-1 block text-sm font-medium dark:text-neutral-200">
+						Flow order
+					</label>
+					<input
+						id="flow-order"
+						value={flowOrder}
+						onChange={(event) =>
+							onPayloadChange({
+								flowOrder: event.target.value,
+								definitions,
+								preWarming,
+								preWarmingOption,
+							})
+						}
+						placeholder="f0-f1"
+						className="w-full rounded border border-neutral-300 p-2 dark:text-neutral-200 dark:border-neutral-700 dark:bg-neutral-800"
+					/>
 				</div>
 
-				{/* Code content */}
-				<pre className="px-6 pb-6 pt-4 overflow-x-auto">
-					<code className="text-[13px] font-mono leading-relaxed block min-w-max text-neutral-800 dark:text-neutral-200">
-						{lines.map((line, idx) => {
-							const lineNum = idx + 1;
-							const isHighlighted =
-								highlightRange &&
-								lineNum >= highlightRange[0] &&
-								lineNum <= highlightRange[1];
+				<div>
+					<label
+						htmlFor="function-definitions"
+						className="mb-1 block text-sm font-medium dark:text-neutral-200"
+					>
+						Function definitions (JSON)
+					</label>
+					<textarea
+						id="function-definitions"
+						value={definitions}
+						onChange={(event) =>
+							onPayloadChange({
+								flowOrder,
+								definitions: event.target.value,
+								preWarming,
+								preWarmingOption,
+							})
+						}
+						placeholder={'{"f0":"https://example.com"}'}
+						rows={3}
+						className="w-full rounded border border-neutral-300 p-2 font-mono dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200"
+					/>
+				</div>
 
-							// Determine if this is first or last highlighted line for rounded corners
-							const isFirstHighlighted =
-								isHighlighted && lineNum === highlightRange![0];
-							const isLastHighlighted =
-								isHighlighted && lineNum === highlightRange![1];
+				<label className="flex items-center gap-2 text-sm dark:text-neutral-200">
+					<input
+						type="checkbox"
+						checked={preWarming}
+						onChange={(event) =>
+							onPayloadChange({
+								flowOrder,
+								definitions,
+								preWarming: event.target.checked,
+								preWarmingOption,
+							})
+						}
+					/>
+					Prewarm functions before execution
+				</label>
 
-							return (
-								<div
-									key={idx}
-									className={`transition-all duration-200 ${isHighlighted
-											? `bg-blue-500/10 dark:bg-blue-500/20 -mx-3 px-3 ${isFirstHighlighted && isLastHighlighted
-												? "rounded"
-												: isFirstHighlighted
-													? "rounded-t"
-													: isLastHighlighted
-														? "rounded-b"
-														: ""
-											}`
-											: ""
-										}`}
-								>
-									<span
-										className={`whitespace-pre ${isHighlighted ? "font-medium" : ""
-											}`}
-									>
-										{highlightSyntax(line || " ")}
-									</span>
-								</div>
-							);
-						})}
-					</code>
-				</pre>
-			</div>
-		</div>
+				{preWarming && (
+					<div>
+						<label htmlFor="prewarming-options" className="mb-1 block text-sm font-medium dark:text-neutral-200">
+							Prewarming options
+						</label>
+						<select
+							id="prewarming-options"
+							value={preWarmingOption}
+							onChange={(event) =>
+								onPayloadChange({
+									flowOrder,
+									definitions,
+									preWarming,
+									preWarmingOption:
+										event.target.value === "next" ? "next" : "all",
+								})
+							}
+							className="w-full rounded border border-neutral-300 p-2 dark:text-neutral-200 dark:border-neutral-700 dark:bg-neutral-800"
+						>
+							<option value="all">All functions</option>
+							<option value="next">Each function before it executes</option>
+						</select>
+					</div>
+				)}
+
+				<button
+					type="submit"
+					disabled={!isIdle}
+					className="rounded bg-neutral-900 px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-neutral-700 dark:text-neutral-200"
+				>
+					{isStarting ? "Starting..." : "Start workflow"}
+				</button>
+
+				<p className="text-sm text-neutral-600 dark:text-neutral-400">
+					Status: {workflowStatus}
+					{currentStep ? ` — ${currentStep}` : ""}
+				</p>
+			</form>
+		</section>
 	);
 }
