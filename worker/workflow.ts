@@ -46,14 +46,12 @@ export class MyWorkflow extends WorkflowEntrypoint<Env, WorkflowPayload> {
 			parsedPayload;
 		const functionStatistics: FunctionStatistic[] = [];
 
-		console.log("test")
 		if (preWarming && preWarmingOption === "all") {
 			await this.prewarmFunctions(flows, definitions, instanceId, step);
 		}
 
 		let functionInput: JsonValue = requestBody;
 		for (const functionName of flows) {
-			console.log("testliii")
 			if (preWarming && preWarmingOption === "next") {
 				await this.prewarmFunctions(
 					[functionName],
@@ -234,14 +232,14 @@ export class MyWorkflow extends WorkflowEntrypoint<Env, WorkflowPayload> {
 				flows.map(async (functionName) => {
 					const url = definitions[functionName];
 					try {
-						const response = await fetch(url);
+						const response = await fetch(url, { method: "GET" });
 						if (!response.ok) {
 							const responseText = await response.text();
 							throw new Error(
 								`HTTP ${response.status} ${response.statusText}${responseText ? `: ${responseText.slice(0, 300)}` : ""}`,
 							);
 						}
-						await response.body?.cancel();
+						await response.text();
 					} catch (error) {
 						throw new Error(
 							`Prewarming ${functionName} at ${url} failed: ${this.getErrorMessage(error)}`,
