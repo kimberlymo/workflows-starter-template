@@ -7,10 +7,12 @@ interface CodeDisplayProps {
 	flowOrder: string;
 	definitions: string;
 	preWarming: boolean;
+	requestBody: string;
 	preWarmingOption: "all" | "next";
 	onPayloadChange: (payload: {
 		flowOrder: string;
 		definitions: string;
+		requestBody: string;
 		preWarming: boolean;
 		preWarmingOption: "all" | "next";
 	}) => void;
@@ -24,6 +26,7 @@ export function CodeDisplay({
 	isStarting,
 	flowOrder,
 	preWarmingOption,
+	requestBody,
 	definitions,
 	preWarming,
 	onPayloadChange,
@@ -50,6 +53,7 @@ export function CodeDisplay({
 							onPayloadChange({
 								flowOrder: event.target.value,
 								definitions,
+								requestBody,
 								preWarming,
 								preWarmingOption,
 							})
@@ -72,7 +76,33 @@ export function CodeDisplay({
 						onChange={(event) =>
 							onPayloadChange({
 								flowOrder,
+								requestBody,
 								definitions: event.target.value,
+								preWarming,
+								preWarmingOption,
+							})
+						}
+						placeholder={'{"f0":"https://example.com"}'}
+						rows={9}
+						className="w-full rounded border border-neutral-300 p-2 font-mono dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200"
+					/>
+				</div>
+
+				<div>
+					<label
+						htmlFor="function-input"
+						className="mb-1 block text-sm font-medium dark:text-neutral-200"
+					>
+						Request Body (JSON)
+					</label>
+					<textarea
+						id="function-input"
+						value={requestBody}
+						onChange={(event) =>
+							onPayloadChange({
+								flowOrder,
+								definitions,
+								requestBody: event.target.value,
 								preWarming,
 								preWarmingOption,
 							})
@@ -91,6 +121,7 @@ export function CodeDisplay({
 							onPayloadChange({
 								flowOrder,
 								definitions,
+								requestBody,
 								preWarming: event.target.checked,
 								preWarmingOption,
 							})
@@ -111,6 +142,7 @@ export function CodeDisplay({
 								onPayloadChange({
 									flowOrder,
 									definitions,
+									requestBody,
 									preWarming,
 									preWarmingOption:
 										event.target.value === "next" ? "next" : "all",

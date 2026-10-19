@@ -4,13 +4,25 @@ import { BackgroundDots } from "./components/BackgroundDots";
 import { WorkflowStatistics } from "./components/WorkflowStatistics";
 import { useWorkflowWebSocket } from "./hooks/useWorkflowWebSocket";
 
+const FUNCTION_DEFINITIONS = '{\n' +
+	'"f0": "https://scad-p03-ingest.felixbieri01-scad.workers.dev",\n' +
+	'"f1": "https://…/sanitize",\n' +
+	'"f2": "https://…/tokenize",\n' +
+	'"f3": "https://…/stopwords",\n' +
+	'"f4": "https://…/count",\n' +
+	'"f5": "https://…/sentiment",\n' +
+	'"f6": "https://…/summarize",\n' +
+	'"f7": "https://…/report"\n' +
+	'}'
+
 function App() {
 	const [instanceId, setInstanceId] = useState<string | null>(null);
 	const [isStarting, setIsStarting] = useState(false);
+	const [startError, setStartError] = useState<string | null>(null);
 	const [workflowPayload, setWorkflowPayload] = useState({
 		flowOrder: "f0-f1-f2-f3",
-		definitions:
-			'{"f0":"https://example.com","f1":"https://google.com","f2":"https://google.com","f3":"https://google.com"}',
+		definitions: FUNCTION_DEFINITIONS,
+		requestBody: '{"url": null, "text": null }',
 		preWarming: false,
 		preWarmingOption: "all" as "all" | "next",
 	});
@@ -18,8 +30,9 @@ function App() {
 
 	useEffect(() => {
 		if (
-			workflowState.workflowStatus === "running" &&
-			workflowState.currentStep
+			(workflowState.workflowStatus === "running" &&
+				workflowState.currentStep) ||
+			workflowState.workflowStatus === "error"
 		) {
 			setIsStarting(false);
 		}
@@ -27,6 +40,7 @@ function App() {
 
 	const handleStartWorkflow = async () => {
 		setIsStarting(true);
+		setStartError(null);
 		setInstanceId(null);
 
 		try {
@@ -37,13 +51,18 @@ function App() {
 			});
 
 			if (!response.ok) {
-				throw new Error("Failed to start workflow");
+				const error = (await response.json()) as { error?: string };
+				throw new Error(error.error ?? "Failed to start workflow");
 			}
 
 			const data = await response.json();
 			setInstanceId(data.instanceId);
-		} catch {
-			alert("Failed to start workflow. Please try again.");
+		} catch (error) {
+			setStartError(
+				error instanceof Error
+					? error.message
+					: "Failed to start workflow. Please try again.",
+			);
 			setIsStarting(false);
 		}
 	};
@@ -98,7 +117,7 @@ function App() {
 					<CodeDisplay
 						currentStep={workflowState.currentStep}
 						workflowStatus={workflowState.workflowStatus}
-						errorMessage={workflowState.errorMessage}
+						errorMessage={startError ?? workflowState.errorMessage}
 						onStartWorkflow={handleStartWorkflow}
 						isStarting={isStarting}
 						{...workflowPayload}

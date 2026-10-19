@@ -28,17 +28,32 @@ const FUNCTION_NAME_PATTERN = /^f[0-7]$/;
  */
 export class MyWorkflow extends WorkflowEntrypoint<Env, WorkflowPayload> {
 	async run(event: WorkflowEvent<WorkflowPayload>, step: WorkflowStep) {
-		const { flows, definitions, preWarming, preWarmingOption } =
-			this.parsePayload(event.payload);
 		const instanceId = event.instanceId;
+		let parsedPayload: ReturnType<MyWorkflow["parsePayload"]>;
+		try {
+			parsedPayload = this.parsePayload(event.payload);
+		} catch (error) {
+			const errorMessage = this.getErrorMessage(error);
+			await this.notifyStep(
+				"validate payload",
+				"error",
+				instanceId,
+				errorMessage,
+			);
+			throw error;
+		}
+		const { flows, definitions, requestBody, preWarming, preWarmingOption } =
+			parsedPayload;
 		const functionStatistics: FunctionStatistic[] = [];
 
+		console.log("test")
 		if (preWarming && preWarmingOption === "all") {
 			await this.prewarmFunctions(flows, definitions, instanceId, step);
 		}
 
-		let functionInput: JsonValue = {};
+		let functionInput: JsonValue = requestBody;
 		for (const functionName of flows) {
+			console.log("testliii")
 			if (preWarming && preWarmingOption === "next") {
 				await this.prewarmFunctions(
 					[functionName],
@@ -129,15 +144,29 @@ export class MyWorkflow extends WorkflowEntrypoint<Env, WorkflowPayload> {
 		flows: string[];
 		definitions: Record<string, string>;
 		preWarming: boolean;
+		requestBody: JsonValue;
 		preWarmingOption: PreWarmingOption;
 	} {
-		const { flowOrder, definitions: serializedDefinitions, preWarming } =
+		const { flowOrder, definitions: serializedDefinitions, preWarming, requestBody: serializedBody } =
 			payload;
-		if (typeof flowOrder !== "string" || typeof serializedDefinitions !== "string") {
-			throw new Error("Payload must include flowOrder and JSON definitions");
+		if (
+			typeof flowOrder !== "string" ||
+			typeof serializedDefinitions !== "string" ||
+			typeof serializedBody !== "string"
+		) {
+			throw new Error(
+				"Payload must include flowOrder, JSON definitions, and a request body",
+			);
 		}
 		if (typeof preWarming !== "boolean") {
 			throw new Error("Payload must include a boolean preWarming value");
+		}
+
+		let requestBody: JsonValue;
+		try {
+			requestBody = JSON.parse(serializedBody) as JsonValue;
+		} catch (error) {
+			throw new Error("Request body must be valid JSON", { cause: error });
 		}
 
 		const flows = flowOrder.split("-").map((flow) => flow.trim());
@@ -188,6 +217,7 @@ export class MyWorkflow extends WorkflowEntrypoint<Env, WorkflowPayload> {
 			flows,
 			definitions,
 			preWarming,
+			requestBody,
 			preWarmingOption: option === "next" ? "next" : "all",
 		};
 	}
