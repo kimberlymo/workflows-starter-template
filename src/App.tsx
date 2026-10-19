@@ -7,8 +7,8 @@ import { useWorkflowWebSocket } from "./hooks/useWorkflowWebSocket";
 const FUNCTION_DEFINITIONS = '{\n' +
 	'"f0": "https://scad-p03-ingest.felixbieri01-scad.workers.dev",\n' +
 	'"f1": "https://…/sanitize",\n' +
-	'"f2": "https://…/tokenize",\n' +
-	'"f3": "https://…/stopwords",\n' +
+	'"f2": "https://scad-p03-tokenize.felixbieri01-scad.workers.dev/",\n' +
+	'"f3": "https://scad-p03-stopwords.felixbieri01-scad.workers.dev/",\n' +
 	'"f4": "https://…/count",\n' +
 	'"f5": "https://…/sentiment",\n' +
 	'"f6": "https://…/summarize",\n' +
