@@ -22,7 +22,7 @@ function App() {
 	const [workflowPayload, setWorkflowPayload] = useState({
 		flowOrder: "f0-f1-f2-f3",
 		definitions: FUNCTION_DEFINITIONS,
-		requestBody: '{"url": null, "text": null }',
+		requestBody: '{ "url": null, "text": null }',
 		preWarming: false,
 		preWarmingOption: "all" as "all" | "next",
 	});

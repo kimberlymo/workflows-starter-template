@@ -107,7 +107,7 @@ export function CodeDisplay({
 								preWarmingOption,
 							})
 						}
-						placeholder={'{"f0":"https://example.com"}'}
+						placeholder={'{ "url":"https://example.com" } or { "text":"Hello World" }'}
 						rows={3}
 						className="w-full rounded border border-neutral-300 p-2 font-mono dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200"
 					/>
