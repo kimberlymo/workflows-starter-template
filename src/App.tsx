@@ -11,8 +11,8 @@ const FUNCTION_DEFINITIONS = '{\n' +
 	'"f3": "https://scad-p03-stopwords.felixbieri01-scad.workers.dev/",\n' +
 	'"f4": "https://…/count",\n' +
 	'"f5": "https://…/sentiment",\n' +
-	'"f6": "https://…/summarize",\n' +
-	'"f7": "https://…/report"\n' +
+	'"f6": "https://scad-p03-f6-summarize.noah-scad1.workers.dev/",\n' +
+	'"f7": "https://scad-p03-f7-report.noah-scad1.workers.dev/"\n' +
 	'}'
 
 function App() {
