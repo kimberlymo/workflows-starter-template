@@ -6,11 +6,11 @@ import { useWorkflowWebSocket } from "./hooks/useWorkflowWebSocket";
 
 const FUNCTION_DEFINITIONS = '{\n' +
 	'"f0": "https://scad-p03-ingest.felixbieri01-scad.workers.dev",\n' +
-	'"f1": "https://…/sanitize",\n' +
+	'"f1": "https://scad-p03-f1-sanitize.long-thunder-6de3.workers.dev/",\n' +
 	'"f2": "https://scad-p03-tokenize.felixbieri01-scad.workers.dev/",\n' +
 	'"f3": "https://scad-p03-stopwords.felixbieri01-scad.workers.dev/",\n' +
-	'"f4": "https://…/count",\n' +
-	'"f5": "https://…/sentiment",\n' +
+	'"f4": "https://scad-p03-f4-count.long-thunder-6de3.workers.dev/",\n' +
+	'"f5": "https://scad-p03-f5-sentiment.long-thunder-6de3.workers.dev/",\n' +
 	'"f6": "https://scad-p03-f6-summarize.noah-scad1.workers.dev/",\n' +
 	'"f7": "https://scad-p03-f7-report.noah-scad1.workers.dev/"\n' +
 	'}'
